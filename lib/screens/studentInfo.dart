@@ -18,6 +18,9 @@ class _StudentInfoReportState extends State<StudentInfoReport> {
   DateTime _focusedDay = DateTime.now();
   DateTime _selectedDay = DateTime.now();
   Map<String, List<String>> _events = {};
+  int totalPresentDays = 0;
+  int totalAbsentDays = 0;
+  int totalDaysWithAttendance = 0;
 
   @override
   void initState() {
@@ -45,6 +48,12 @@ class _StudentInfoReportState extends State<StudentInfoReport> {
           );
         }
         print("Events=================" + _events.toString());
+        try {
+          calculateAttendanceStatistics(_events);
+          loading = false;
+        } catch (e) {
+          loading = false;
+        }
         loading = false;
       });
     } else {
@@ -53,6 +62,60 @@ class _StudentInfoReportState extends State<StudentInfoReport> {
         loading = false;
       });
     }
+  }
+
+  void calculateAttendanceStatistics(Map<String, List<String>> attendanceData) {
+    totalPresentDays = 0;
+    totalAbsentDays = 0;
+    totalDaysWithAttendance = attendanceData.length;
+
+    attendanceData.forEach((date, statuses) {
+      if (statuses.contains('Yes')) {
+        totalPresentDays++;
+      } else if (statuses.contains('No')) {
+        totalAbsentDays++;
+      }
+    });
+    print("=-=-=-=-=-=-=-=-" + totalPresentDays.toString());
+    print("=-=-=-=-=-=-=-=-" + totalAbsentDays.toString());
+  }
+
+  void updateAnalysisForMonth(
+      DateTime firstVisibleDay, DateTime lastVisibleDay) {
+    // Filter attendance data for the visible month
+    Map<DateTime, List<String>> filteredData = {};
+
+    _events.forEach((data, statuses) {
+      DateTime date = DateTime.parse(data);
+      if (date.isAfter(firstVisibleDay.subtract(Duration(days: 1))) &&
+          date.isBefore(lastVisibleDay.add(Duration(days: 1)))) {
+        filteredData[date] = statuses;
+      }
+    });
+
+    // Calculate statistics for the filtered data
+    totalPresentDays = 0;
+    totalAbsentDays = 0;
+    totalDaysWithAttendance = filteredData.length;
+
+    filteredData.forEach((date, statuses) {
+      if (statuses.contains('Yes')) {
+        totalPresentDays++;
+      } else if (statuses.contains('No')) {
+        totalAbsentDays++;
+      }
+    });
+
+    double percentageAttendance = totalDaysWithAttendance > 0
+        ? (totalPresentDays / totalDaysWithAttendance) * 100.0
+        : 0.0;
+
+    print('For the month of ${firstVisibleDay.month}/${firstVisibleDay.year}:');
+    print('Total Present Days: $totalPresentDays');
+    print('Total Absent Days: $totalAbsentDays');
+    print('Total Days with Attendance: $totalDaysWithAttendance');
+    print(
+        'Percentage of Attendance: ${percentageAttendance.toStringAsFixed(1)}%');
   }
 
   @override
@@ -223,6 +286,11 @@ class _StudentInfoReportState extends State<StudentInfoReport> {
                                     onPageChanged: (focusedDay) {
                                       _focusedDay = focusedDay;
                                     },
+                                    // onVisibleDaysChanged:
+                                    //     (first, last, format) {
+                                    //   // Update analysis based on the visible month
+                                    //   updateAnalysisForMonth(first, last);
+                                    // },
                                     onDaySelected: (selectedDay, focusedDay) {
                                       setState(() {
                                         _selectedDay = selectedDay;
@@ -231,9 +299,11 @@ class _StudentInfoReportState extends State<StudentInfoReport> {
                                   ),
                                 ),
                                 AttendanceAnalysisCard(
-                                  totalPresentDays: 20,
-                                  totalAbsentDays: 5,
-                                  attendancePercentage: 80.0,
+                                  totalPresentDays: totalPresentDays,
+                                  totalAbsentDays: totalAbsentDays,
+                                  attendancePercentage: totalPresentDays /
+                                      totalDaysWithAttendance *
+                                      100,
                                 )
                               ],
                             ),
