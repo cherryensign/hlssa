@@ -1,5 +1,4 @@
 import 'package:HLSA/services/supabaseFunc.dart';
-import 'package:HLSA/widgets/analysiscard.dart';
 import 'package:flutter/material.dart';
 import 'package:table_calendar/table_calendar.dart';
 
@@ -17,14 +16,15 @@ class _StudentInfoReportState extends State<StudentInfoReport> {
   CalendarFormat _calendarFormat = CalendarFormat.month;
   DateTime _focusedDay = DateTime.now();
   DateTime _selectedDay = DateTime.now();
+  DateTime StartDay = DateTime.now();
   Map<String, List<String>> _events = {};
-  int totalPresentDays = 0;
-  int totalAbsentDays = 0;
-  int totalDaysWithAttendance = 0;
+  late ValueNotifier<Map<String, dynamic>> analysisNotifier;
 
   @override
   void initState() {
     super.initState();
+    analysisNotifier =
+        ValueNotifier<Map<String, dynamic>>(getAnalysisForMonth());
     fetchPlayerAttendance();
   }
 
@@ -42,14 +42,14 @@ class _StudentInfoReportState extends State<StudentInfoReport> {
 
           _events.update(
             date.toString(),
-            // (value) => value..add(status),
             (value) => [...value, status],
             ifAbsent: () => [status],
           );
         }
         print("Events=================" + _events.toString());
         try {
-          calculateAttendanceStatistics(_events);
+          analysisNotifier =
+              ValueNotifier<Map<String, dynamic>>(getAnalysisForMonth());
           loading = false;
         } catch (e) {
           loading = false;
@@ -64,58 +64,30 @@ class _StudentInfoReportState extends State<StudentInfoReport> {
     }
   }
 
-  void calculateAttendanceStatistics(Map<String, List<String>> attendanceData) {
-    totalPresentDays = 0;
-    totalAbsentDays = 0;
-    totalDaysWithAttendance = attendanceData.length;
+  Map<String, dynamic> getAnalysisForMonth() {
+    int totalPresentDays = 0;
+    int totalAbsentDays = 0;
+    int totalDaysWithAttendance = attendanceData.length;
+    double attendancePercentage = 0;
 
-    attendanceData.forEach((date, statuses) {
-      if (statuses.contains('Yes')) {
+    _events.forEach((date, statuses) {
+      if (statuses.contains('Yes') &&
+          _focusedDay.month == DateTime.parse(date).month) {
         totalPresentDays++;
-      } else if (statuses.contains('No')) {
+      } else if (statuses.contains('No') &&
+          _focusedDay.month == DateTime.parse(date).month) {
         totalAbsentDays++;
       }
     });
     print("=-=-=-=-=-=-=-=-" + totalPresentDays.toString());
     print("=-=-=-=-=-=-=-=-" + totalAbsentDays.toString());
-  }
-
-  void updateAnalysisForMonth(
-      DateTime firstVisibleDay, DateTime lastVisibleDay) {
-    // Filter attendance data for the visible month
-    Map<DateTime, List<String>> filteredData = {};
-
-    _events.forEach((data, statuses) {
-      DateTime date = DateTime.parse(data);
-      if (date.isAfter(firstVisibleDay.subtract(Duration(days: 1))) &&
-          date.isBefore(lastVisibleDay.add(Duration(days: 1)))) {
-        filteredData[date] = statuses;
-      }
-    });
-
-    // Calculate statistics for the filtered data
-    totalPresentDays = 0;
-    totalAbsentDays = 0;
-    totalDaysWithAttendance = filteredData.length;
-
-    filteredData.forEach((date, statuses) {
-      if (statuses.contains('Yes')) {
-        totalPresentDays++;
-      } else if (statuses.contains('No')) {
-        totalAbsentDays++;
-      }
-    });
-
-    double percentageAttendance = totalDaysWithAttendance > 0
-        ? (totalPresentDays / totalDaysWithAttendance) * 100.0
-        : 0.0;
-
-    print('For the month of ${firstVisibleDay.month}/${firstVisibleDay.year}:');
-    print('Total Present Days: $totalPresentDays');
-    print('Total Absent Days: $totalAbsentDays');
-    print('Total Days with Attendance: $totalDaysWithAttendance');
-    print(
-        'Percentage of Attendance: ${percentageAttendance.toStringAsFixed(1)}%');
+    attendancePercentage = totalPresentDays / totalDaysWithAttendance * 100;
+    return {
+      'totalPresentDays': totalPresentDays,
+      'totalAbsentDays': totalAbsentDays,
+      'totalDaysWithAttendance': totalDaysWithAttendance,
+      'percentageAttendance': attendancePercentage,
+    };
   }
 
   @override
@@ -207,6 +179,7 @@ class _StudentInfoReportState extends State<StudentInfoReport> {
                                   child: TableCalendar(
                                     calendarFormat: _calendarFormat,
                                     focusedDay: _focusedDay,
+                                    // rangeStartDay: rangeStartDay,
                                     firstDay: DateTime.utc(2023, 1, 1),
                                     lastDay: DateTime.now(),
                                     calendarStyle: const CalendarStyle(
@@ -283,14 +256,11 @@ class _StudentInfoReportState extends State<StudentInfoReport> {
                                         _calendarFormat = format;
                                       });
                                     },
-                                    onPageChanged: (focusedDay) {
-                                      _focusedDay = focusedDay;
+                                    onPageChanged: (rangeStartDay) {
+                                      _focusedDay = rangeStartDay;
+                                      analysisNotifier.value =
+                                          getAnalysisForMonth();
                                     },
-                                    // onVisibleDaysChanged:
-                                    //     (first, last, format) {
-                                    //   // Update analysis based on the visible month
-                                    //   updateAnalysisForMonth(first, last);
-                                    // },
                                     onDaySelected: (selectedDay, focusedDay) {
                                       setState(() {
                                         _selectedDay = selectedDay;
@@ -298,13 +268,86 @@ class _StudentInfoReportState extends State<StudentInfoReport> {
                                     },
                                   ),
                                 ),
-                                AttendanceAnalysisCard(
-                                  totalPresentDays: totalPresentDays,
-                                  totalAbsentDays: totalAbsentDays,
-                                  attendancePercentage: totalPresentDays /
-                                      totalDaysWithAttendance *
-                                      100,
-                                )
+                                // AttendanceAnalysisCard(
+                                //   attendanceData: _events,
+                                //   startday: rangeStartDay,
+                                // ),
+                                ValueListenableBuilder(
+                                    valueListenable: analysisNotifier,
+                                    builder: (context, analysis, _) {
+                                      return Card(
+                                        elevation: 5,
+                                        margin:
+                                            EdgeInsets.symmetric(vertical: 10),
+                                        child: Container(
+                                          padding: EdgeInsets.symmetric(
+                                            vertical: 10,
+                                            horizontal: 10,
+                                          ),
+                                          child: Row(
+                                            mainAxisAlignment:
+                                                MainAxisAlignment.spaceBetween,
+                                            children: [
+                                              Stack(
+                                                alignment: Alignment.center,
+                                                children: [
+                                                  Center(
+                                                    child: Container(
+                                                      height: 90,
+                                                      width: 90,
+                                                      child:
+                                                          CircularProgressIndicator(
+                                                        value: (100 -
+                                                                analysis[
+                                                                    'percentageAttendance']) /
+                                                            100.0,
+                                                        color: Colors.red,
+                                                        backgroundColor:
+                                                            Colors.green,
+                                                        strokeWidth: 10.0,
+                                                      ),
+                                                    ),
+                                                  ),
+                                                  Center(
+                                                    child: Text(
+                                                      '${analysis['percentageAttendance'].toStringAsFixed(1)}%',
+                                                      style: TextStyle(
+                                                        // color: Colors.white,
+                                                        fontSize: 14,
+                                                        fontWeight:
+                                                            FontWeight.bold,
+                                                      ),
+                                                    ),
+                                                  ),
+                                                ],
+                                              ),
+                                              Column(
+                                                crossAxisAlignment:
+                                                    CrossAxisAlignment.end,
+                                                children: [
+                                                  Text(
+                                                    'Attendance Analysis',
+                                                    style: TextStyle(
+                                                      fontSize: 18,
+                                                      fontWeight:
+                                                          FontWeight.bold,
+                                                    ),
+                                                  ),
+                                                  SizedBox(height: 8),
+                                                  // Total Present Days
+                                                  Text(
+                                                      'Total Present Days: ${analysis['totalPresentDays']}'),
+                                                  Text(
+                                                      'Total Absent Days: ${analysis['totalAbsentDays']}'),
+                                                  Text(
+                                                      'Percentage of Attendance: ${analysis['percentageAttendance'].toStringAsFixed(1)}%'),
+                                                ],
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                      );
+                                    }),
                               ],
                             ),
                     ],
